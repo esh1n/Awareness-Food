@@ -85,9 +85,10 @@ class MainActivity : AppCompatActivity() {
     binding = ActivityMainBinding.inflate(layoutInflater)
     setContentView(binding.root)
 
+    unavailableConnectionLifecycleOwner.addObserver(networkObserver)
     // Your code
     networkMonitor = NetworkMonitor(this)
-
+    lifecycle.addObserver(networkMonitor)
     viewModel.recipeState.observe(this, Observer {
       when (it) {
         RecipeApiState.Error -> showNetworkUnavailableAlert(R.string.error)
@@ -96,25 +97,15 @@ class MainActivity : AppCompatActivity() {
 
     })
     viewModel.getRandomRecipe()
-    // 1.Network Monitor initialization.
-    networkMonitor.init()
 
     networkMonitor.networkAvailableStateFlow.asLiveData().observe(this, Observer { networkState ->
       handleNetworkState(networkState)
     })
+    viewModel.loadingState.observe(this, Observer { uiLoadingState ->
+      handleLoadingState(uiLoadingState)
+    })
   }
 
-  // 2. Register network callback.
-  override fun onStart() {
-    super.onStart()
-    networkMonitor.registerNetworkCallback()
-  }
-
-  // 3. Unregister network callback.
-  override fun onStop() {
-    super.onStop()
-    networkMonitor.unregisterNetworkCallback()
-  }
 
   override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
     R.id.menu_refresh -> {
@@ -187,7 +178,14 @@ class MainActivity : AppCompatActivity() {
 
   private fun handleNetworkState(networkState: NetworkState?) {
     when (networkState) {
-      NetworkState.Unavailable -> showNetworkUnavailableAlert(R.string.network_is_unavailable)
+      NetworkState.Unavailable ->{
+        showNetworkUnavailableAlert(R.string.network_is_unavailable)
+        //unavailableConnectionLifecycleOwner.onConnectionLost()
+      }
+      NetworkState.Available -> {
+        showNetworkUnavailableAlert(R.string.network_is_available)
+        //unavailableConnectionLifecycleOwner.onConnectionAvailable()
+      }
     }
   }
 
@@ -195,15 +193,15 @@ class MainActivity : AppCompatActivity() {
     snackbar?.dismiss()
   }
 
-  inner class NetworkObserver : LifecycleObserver {
+  inner class NetworkObserver : DefaultLifecycleObserver {
 
-    @OnLifecycleEvent(Lifecycle.Event.ON_START)
-    fun onNetworkUnavailable() {
+    override fun onStart(owner: LifecycleOwner) {
+      super.onStart(owner)
       showNetworkUnavailableAlert(R.string.network_is_unavailable)
     }
 
-    @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
-    fun onNetworkAvailable() {
+    override fun onStop(owner: LifecycleOwner) {
+      super.onStop(owner)
       removeNetworkUnavailableAlert()
     }
   }
